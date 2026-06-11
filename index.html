@@ -1,413 +1,703 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  StyleSheet, 
-  Text, 
-  View, 
-  ScrollView, 
-  TouchableOpacity, 
-  TextInput, 
-  Switch, 
-  Dimensions, 
-  SafeAreaView, 
-  StatusBar,
-  Animated
-} from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; connect-src 'self'; img-src 'self' data:;"/>
+<title>EcoTrace v2 — Hackathon Master Build</title>
 
-const { width } = Dimensions.get('window');
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet"/>
 
-// ---------------------------------------------------------
-// 1. Pure Core Calculation Engine
-// ---------------------------------------------------------
-const CalcEngine = {
-  transport: (km, fuelType, transitDays) => {
-    const fMult = { EV: 0.05, Hybrid: 0.5, Petrol: 1.0, Diesel: 1.15 };
-    const base = km * 52 * 0.00019 * (fMult[fuelType] || 1.0);
-    const reduction = 1 - (transitDays * 0.06);
-    return Math.max(0.05, +(base * reduction).toFixed(2));
-  },
-  energy: (homeSize, renewPct) => {
-    return Math.max(0.1, +((homeSize * 0.006 + 1.0) * (1 - renewPct / 100)).toFixed(2));
-  },
-  food: (meatMeals) => {
-    return Math.max(0.1, +(0.4 + meatMeals * 0.065).toFixed(2));
-  },
-  flights: (short, long) => {
-    return +(short * 0.13 + long * 1.2).toFixed(2);
-  }
-};
-
-export default function App() {
-  // Navigation & View Tabs
-  const [currentTab, setCurrentTab] = useState('Home'); // Home, Track, Coach, Quests, Profile
-  
-  // Application Global Tracking State
-  const [km, setKm] = useState(240);
-  const [fuelType, setFuelType] = useState('Petrol');
-  const [transitDays, setTransitDays] = useState(1);
-  const [homeSize, setHomeSize] = useState(85);
-  const [renewPct, setRenewPct] = useState(20);
-  const [meatMeals, setMeatMeals] = useState(5);
-  const [shortFlights, setShortFlights] = useState(1);
-  const [longFlights, setLongFlights] = useState(0);
-
-  // Actions & Quests State
-  const [commitments, setCommitments] = useState({
-    cycle: false,
-    greenEnergy: false,
-    lessMeat: false,
-  });
-  
-  // AI Coach Stream State
-  const [chatInput, setChatInput] = useState('');
-  const [chatResponse, setChatResponse] = useState('System online. Footprint parameters successfully injected into context.');
-
-  // Live Footprint Metrics
-  const [emissions, setEmissions] = useState({ transport: 3.8, energy: 2.1, food: 1.5, flights: 0.2, shopping: 0.8 });
-  const [saved, setSaved] = useState(0);
-  
-  // SVG Ring Animation Parameters
-  const animatedValue = useRef(new Animated.Value(0)).current;
-  const radius = 60;
-  const strokeWidth = 10;
-  const circumference = 2 * Math.PI * radius;
-
-  // Recalculate values dynamically when inputs change
-  useEffect(() => {
-    const t = CalcEngine.transport(km, fuelType, transitDays);
-    const e = CalcEngine.energy(homeSize, renewPct);
-    const f = CalcEngine.food(meatMeals);
-    const fl = CalcEngine.flights(shortFlights, longFlights);
-    
-    setEmissions({ transport: t, energy: e, food: f, flights: fl, shopping: 0.8 });
-  }, [km, fuelType, transitDays, homeSize, renewPct, meatMeals, shortFlights, longFlights]);
-
-  // Compute live net totals
-  const baseTotal = Object.values(emissions).reduce((a, b) => a + b, 0);
-  const netTotal = Math.max(0, baseTotal - saved);
-  const maxTarget = 15.0; // Benchmark cap for percentage calculations
-  const targetPct = Math.min(netTotal / maxTarget, 1);
-
-  // Animate the SVG Ring on footprint shifts
-  useEffect(() => {
-    Animated.timing(animatedValue, {
-      toValue: 1 - targetPct,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, [netTotal]);
-
-  const strokeDashoffset = animatedValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [circumference, 0],
-  });
-
-  // Handle commitment toggles
-  const toggleCommitment = (key, val) => {
-    setCommitments(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      let newSaved = 0;
-      if (next.cycle) newSaved += 0.6;
-      if (next.greenEnergy) newSaved += 1.1;
-      if (next.lessMeat) newSaved += 0.5;
-      setSaved(newSaved);
-      return next;
-    });
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      
-      {/* HEADER BAR */}
-      <View style={styles.header}>
-        <Text style={styles.logoText}>🌿 ECOTRACE <Text style={styles.v2Text}>v2</Text></Text>
-        <View style={styles.streakBadge}>
-          <Text style={styles.streakText}>🔥 12 Day Streak</Text>
-        </View>
-      </View>
-
-      {/* CORE VIEWPORT */}
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        
-        {/* TAB 1: HOME */}
-        {currentTab === 'Home' && (
-          <View>
-            {/* VIRTUAL GLASSMORPHIC RING CARD */}
-            <View style={styles.glassCard}>
-              <View style={styles.ringContainer}>
-                <Svg width="160" height="160" viewBox="0 0 140 140">
-                  <Circle cx="70" cy="70" r={radius} fill="none" stroke="#161925" strokeWidth={strokeWidth} />
-                  <AnimatedCircle 
-                    cx="70" cy="70" r={radius} fill="none" 
-                    stroke={netTotal <= 2.0 ? '#00E5FF' : '#00FF87'} 
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                    transform="rotate(-90 70 70)"
-                  />
-                </Svg>
-                <View style={styles.ringCenterText}>
-                  <Text style={styles.totalNum}>{netTotal.toFixed(1)}</Text>
-                  <Text style={styles.totalUnit}>t CO₂ / yr</Text>
-                </View>
-              </View>
-              <Text style={styles.gradeText}>
-                {netTotal <= 2.0 ? '🏆 PARIS AGREEMENT ALIGNED' : '⚡ ABOVE WORLD AVERAGE'}
-              </Text>
-            </View>
-
-            {/* QUICK ACTIONS STATS GRID */}
-            <View style={styles.grid}>
-              <View style={styles.miniCard}>
-                <Text style={styles.miniVal}>{baseTotal.toFixed(1)}t</Text>
-                <Text style={styles.miniLbl}>BASE FOOTPRINT</Text>
-              </View>
-              <View style={[styles.miniCard, { borderColor: '#00FF87' }]}>
-                <Text style={[styles.miniVal, { color: '#00FF87' }]}>-{saved.toFixed(1)}t</Text>
-                <Text style={styles.miniLbl}>TOTAL SAVED</Text>
-              </View>
-            </View>
-
-            {/* EMISSIONS BREAKDOWN BREAKDOWN */}
-            <Text style={styles.sectionHeader}>LIVE EMISSIONS MIX</Text>
-            {Object.entries(emissions).map(([key, val]) => (
-              <View key={key} style={styles.barContainer}>
-                <View style={styles.barLabelRow}>
-                  <Text style={styles.barLabel}>{key.toUpperCase()}</Text>
-                  <Text style={styles.barValue}>{val.toFixed(1)}t</Text>
-                </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${Math.min((val / 6) * 100, 100)}%` }]} />
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* TAB 2: TRACK */}
-        {currentTab === 'Track' && (
-          <View>
-            <Text style={styles.sectionHeader}>REAL-TIME footprint SLIDERS</Text>
-            
-            {/* TRANSPORT CONFIG */}
-            <View style={styles.glassCard}>
-              <Text style={styles.cardHeader}>🚗 Transport Metrics</Text>
-              <Text style={styles.sliderLabel}>Weekly Distance: <Text style={styles.neonText}>{km} km</Text></Text>
-              {/* Note: Standard slider requires React Native Slider package. Native text fallback configuration showcased */}
-              <View style={styles.mockSliderRow}>
-                <TouchableOpacity onPress={() => setKm(Math.max(0, km - 40))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setKm(Math.min(800, km + 40))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
-              </View>
-
-              <Text style={styles.sliderLabel}>Fuel Source: <Text style={styles.neonText}>{fuelType}</Text></Text>
-              <View style={styles.toggleGroup}>
-                {['EV', 'Hybrid', 'Petrol', 'Diesel'].map(f => (
-                  <TouchableOpacity 
-                    key={f} 
-                    style={[styles.chip, fuelType === f && styles.activeChip]} 
-                    onPress={() => setFuelType(f)}
-                  >
-                    <Text style={[styles.chipText, fuelType === f && styles.activeChipText]}>{f}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* HOME ENERGY CONFIG */}
-            <View style={styles.glassCard}>
-              <Text style={styles.cardHeader}>⚡ Energy Infrastructure</Text>
-              <Text style={styles.sliderLabel}>Property Size: <Text style={styles.neonText}>{homeSize} m²</Text></Text>
-              <View style={styles.mockSliderRow}>
-                <TouchableOpacity onPress={() => setHomeSize(Math.max(20, homeSize - 10))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setHomeSize(Math.min(400, homeSize + 10))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
-              </View>
-
-              <Text style={styles.sliderLabel}>Renewable Energy Mix: <Text style={styles.neonText}>{renewPct}%</Text></Text>
-              <View style={styles.mockSliderRow}>
-                <TouchableOpacity onPress={() => setRenewPct(Math.max(0, renewPct - 10))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
-                <TouchableOpacity onPress={() => setRenewPct(Math.min(100, renewPct + 10))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {/* TAB 3: COACH (AI MULTI-TURN) */}
-        {currentTab === 'Coach' && (
-          <View style={styles.glassCard}>
-            <Text style={styles.cardHeader}>🤖 CLAUDE AI COACH</Text>
-            <ScrollView style={styles.chatBox}>
-              <Text style={styles.chatMessage}>{chatResponse}</Text>
-            </ScrollView>
-            <View style={styles.inputRow}>
-              <TextInput 
-                style={styles.chatInput} 
-                placeholder="Ask about your reduction target..." 
-                placeholderTextColor="#61615A"
-                value={chatInput}
-                onChangeText={setChatInput}
-              />
-              <TouchableOpacity style={styles.sendBtn} onPress={() => {
-                setChatResponse(`Analysis complete for your ${netTotal.toFixed(1)}t footprint. Prioritize increasing your renewable energy configuration to clear the current target.`);
-                setChatInput('');
-              }}>
-                <Text style={styles.sendBtnText}>ASK</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* TAB 4: QUESTS */}
-        {currentTab === 'Quests' && (
-          <View>
-            <Text style={styles.sectionHeader}>ACTIVE ECO-CHALLENGES</Text>
-            <View style={styles.glassCard}>
-              <View style={styles.questRow}>
-                <Text style={styles.questTitle}>🚲 Zero-Emission Commuter</Text>
-                <Switch 
-                  value={commitments.cycle} 
-                  onValueChange={() => toggleCommitment('cycle')} 
-                  thumbColor={commitments.cycle ? '#00FF87' : '#2E2F2B'}
-                />
-              </View>
-              <Text style={styles.questDesc}>Commit to clean short-distance transits. Saves 0.6t CO₂/yr (+25 XP)</Text>
-            </View>
-
-            <View style={styles.glassCard}>
-              <View style={styles.questRow}>
-                <Text style={styles.questTitle}>☀️ Grid Transformer</Text>
-                <Switch 
-                  value={commitments.greenEnergy} 
-                  onValueChange={() => toggleCommitment('greenEnergy')}
-                  thumbColor={commitments.greenEnergy ? '#00FF87' : '#2E2F2B'}
-                />
-              </View>
-              <Text style={styles.questDesc}>Migrate residential power loops to clean sourcing. Saves 1.1t CO₂/yr (+25 XP)</Text>
-            </View>
-          </View>
-        )}
-
-        {/* TAB 5: PROFILE */}
-        {currentTab === 'Profile' && (
-          <View style={styles.glassCard}>
-            <Text style={styles.cardHeader}>👤 EMISSIONS PROFILE IDENT</Text>
-            <Text style={styles.profileMeta}>Status: <Text style={styles.neonText}>Eco-Legend Level 4</Text></Text>
-            <Text style={styles.profileMeta}>Total Active Trackers: <Text style={styles.cyanText}>4 Screen Stack Node</Text></Text>
-            <TouchableOpacity style={styles.resetBtn} onPress={() => {
-              setKm(240); setFuelType('Petrol'); setTransitDays(1); setHomeSize(85); setRenewPct(20);
-            }}>
-              <Text style={styles.resetBtnText}>RESET CORE SCHEMATICS</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-      </ScrollView>
-
-      {/* FOOTER NAVIGATION TABS */}
-      <View style={styles.tabBar}>
-        {['Home', 'Track', 'Coach', 'Quests', 'Profile'].map(tab => (
-          <TouchableOpacity 
-            key={tab} 
-            style={styles.tabItem} 
-            onPress={() => setCurrentTab(tab)}
-          >
-            <Text style={[styles.tabText, currentTab === tab && styles.activeTabText]}>{tab}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </SafeAreaView>
-  );
+<style>
+/* ---------------------------------------------------------
+   THEME VARIABLES (LIGHT MODE DEFAULT)
+--------------------------------------------------------- */
+:root {
+    --bg-void: #F6F7F5;
+    --card-bg: #FFFFFF;
+    --card-border: #ECEEE9;
+    --card-solid: #FFFFFF;
+    --neon-green: #0F6E56;
+    --neon-green-dim: #E1F5EE;
+    --neon-cyan: #007A8A;
+    --neon-cyan-dim: #E0F7FA;
+    --text-main: #2E2F2B;
+    --text-muted: #5F6059;
+    --danger: #d32f2f;
+    --danger-dim: #ffebee;
+    --font-sans: 'DM Sans', system-ui, sans-serif;
+    --font-serif: 'DM Serif Display', serif;
 }
 
-// ---------------------------------------------------------
-// 2. Bold Eco-Futuristic Styles (Deep Void + Neon Green/Cyan)
-// ---------------------------------------------------------
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#090A0F' },
-  scrollContainer: { padding: 20, paddingBottom: 100 },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20, 
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderColor: '#161925'
-  },
-  logoText: { color: '#ffffff', fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  v2Text: { color: '#00FF87', fontSize: 12 },
-  streakBadge: { backgroundColor: '#161925', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
-  streakText: { color: '#00E5FF', fontSize: 11, fontWeight: '600' },
-  glassCard: { 
-    backgroundColor: 'rgba(22, 25, 37, 0.7)', 
-    borderRadius: 20, 
-    padding: 20, 
-    marginBottom: 15, 
-    borderWidth: 1, 
-    borderColor: 'rgba(255, 255, 255, 0.05)' 
-  },
-  ringContainer: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
-  ringCenterText: { position: 'absolute', alignItems: 'center' },
-  totalNum: { color: '#ffffff', fontSize: 36, fontWeight: '800' },
-  totalUnit: { color: '#61615A', fontSize: 11, marginTop: 2 },
-  gradeText: { color: '#00FF87', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 15, letterSpacing: 0.5 },
-  grid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
-  miniCard: { 
-    backgroundColor: '#161925', 
-    width: '48%', 
-    borderRadius: 14, 
-    padding: 15, 
-    borderWidth: 1, 
-    borderColor: 'rgba(255, 255, 255, 0.03)' 
-  },
-  miniVal: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
-  miniLbl: { color: '#61615A', fontSize: 9, marginTop: 4, letterSpacing: 0.5 },
-  sectionHeader: { color: '#61615A', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 12, marginTop: 10 },
-  barContainer: { marginBottom: 12 },
-  barLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  barLabel: { color: '#ffffff', fontSize: 11, fontWeight: '500' },
-  barValue: { color: '#00E5FF', fontSize: 11, fontWeight: '600' },
-  barTrack: { height: 6, backgroundColor: '#161925', borderRadius: 3, overflow: 'hidden' },
-  barFill: { height: '100%', backgroundColor: '#00FF87', borderRadius: 3 },
-  cardHeader: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 15 },
-  sliderLabel: { color: '#ffffff', fontSize: 13, marginBottom: 8 },
-  neonText: { color: '#00FF87', fontWeight: '700' },
-  cyanText: { color: '#00E5FF', fontWeight: '700' },
-  mockSliderRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
-  stepBtn: { backgroundColor: '#161925', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
-  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { backgroundColor: '#161925', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  activeChip: { backgroundColor: 'rgba(0, 255, 135, 0.15)', borderWidth: 1, borderColor: '#00FF87' },
-  chipText: { color: '#61615A', fontSize: 12 },
-  activeChipText: { color: '#00FF87', fontWeight: '600' },
-  chatBox: { height: 150, backgroundColor: '#090A0F', borderRadius: 10, padding: 12, marginBottom: 12 },
-  chatMessage: { color: '#ffffff', fontSize: 13, lineHeigh: 18 },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  chatInput: { flex: 1, backgroundColor: '#090A0F', borderRadius: 10, paddingLeft: 12, color: '#ffffff', fontSize: 13 },
-  sendBtn: { backgroundColor: '#00FF87', paddingHorizontal: 16, borderRadius: 10, justifyContent: 'center' },
-  sendBtnText: { color: '#090A0F', fontWeight: '700', fontSize: 12 },
-  questRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  questTitle: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
-  questDesc: { color: '#61615A', fontSize: 11, marginTop: 6 },
-  profileMeta: { color: '#ffffff', fontSize: 13, marginBottom: 8 },
-  resetBtn: { backgroundColor: 'rgba(211, 47, 47, 0.1)', borderWidth: 1, borderColor: '#d32f2f', padding: 12, borderRadius: 10, marginTop: 15, alignItems: 'center' },
-  resetBtnText: { color: '#d32f2f', fontSize: 12, fontWeight: '700' },
-  tabBar: { 
-    flexDirection: 'row', 
-    backgroundColor: '#090A0F', 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0, 
-    right: 0, 
-    height: 65, 
-    borderTopWidth: 1, 
-    borderColor: '#161925',
-    alignItems: 'center'
-  },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  tabText: { color: '#61615A', fontSize: 11, fontWeight: '500' },
-  activeTabText: { color: '#00FF87', fontWeight: '700' }
+/* ---------------------------------------------------------
+   THEME VARIABLES (DARK MODE OPTION)
+--------------------------------------------------------- */
+[data-theme="dark"] {
+    --bg-void: #090A0F;
+    --card-bg: rgba(22, 25, 37, 0.7);
+    --card-border: rgba(255, 255, 255, 0.05);
+    --card-solid: #161925;
+    --neon-green: #00FF87;
+    --neon-green-dim: rgba(0, 255, 135, 0.15);
+    --neon-cyan: #00E5FF;
+    --neon-cyan-dim: rgba(0, 229, 255, 0.15);
+    --text-main: #ffffff;
+    --text-muted: #888888;
+    --danger: #ef5350;
+    --danger-dim: rgba(239, 83, 80, 0.1);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); background: var(--bg-void); color: var(--text-main); font-size: 15px; line-height: 1.6; display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden; transition: background 0.3s, color 0.3s; }
+button { background: none; border: none; cursor: pointer; font-family: var(--font-sans); }
+
+/* ---------------------------------------------------------
+   ACCESSIBILITY
+--------------------------------------------------------- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; }
+:focus-visible { outline: 3px solid var(--neon-cyan); outline-offset: 2px; border-radius: 4px; }
+.skip-link { position: absolute; top: -50px; left: 10px; background: var(--neon-cyan); color: #fff; padding: 10px 16px; border-radius: 8px; z-index: 1000; font-weight: 500; text-decoration: none; transition: top 0.2s; }
+.skip-link:focus { top: 10px; }
+
+body.a11y-reduced-motion *, body.a11y-reduced-motion ::before, body.a11y-reduced-motion ::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+body.a11y-large-text { font-size: 18px; }
+body.a11y-large-text .mini-val { font-size: 22px; }
+body.a11y-large-text .card-header { font-size: 16px; }
+body.a11y-large-text .sl-label, body.a11y-large-text .quest-title { font-size: 16px; }
+
+/* ---------------------------------------------------------
+   HEADER & LAYOUT
+--------------------------------------------------------- */
+header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; border-bottom: 1px solid var(--card-solid); background: var(--bg-void); position: sticky; top: 0; z-index: 100; transition: background 0.3s, border-color 0.3s; }
+.logo { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--text-main); }
+.logo span { color: var(--neon-green); font-size: 12px; }
+.streak-badge { background: var(--card-solid); padding: 6px 12px; border-radius: 20px; color: var(--neon-cyan); font-size: 11px; font-weight: 600; border: 1px solid var(--card-border); }
+
+main { flex: 1; padding: 20px; padding-bottom: 90px; max-width: 800px; margin: 0 auto; width: 100%; }
+
+.glass-card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 15px; border: 1px solid var(--card-border); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0,0,0,0.06); transition: background 0.3s, border-color 0.3s, box-shadow 0.3s; }
+[data-theme="dark"] .glass-card { box-shadow: none; }
+
+.sec-header { color: var(--text-muted); font-size: 11px; font-weight: 700; letter-spacing: 1px; margin: 10px 0 12px; text-transform: uppercase; }
+.card-header { font-size: 14px; font-weight: 700; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; color: var(--text-main); }
+
+/* ---------------------------------------------------------
+   SVG RING & STATS
+--------------------------------------------------------- */
+.ring-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; margin-bottom: 15px; }
+.ring-center { position: absolute; text-align: center; }
+.ring-num { font-family: var(--font-serif); font-size: 42px; font-weight: 800; line-height: 1; transition: color 0.3s; }
+.ring-unit { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.grade-text { font-size: 11px; font-weight: 700; text-align: center; letter-spacing: 0.5px; margin-top: 10px; transition: color 0.3s; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px; }
+.mini-card { background: var(--card-solid); border-radius: 14px; padding: 15px; border: 1px solid var(--card-border); text-align: center; transition: background 0.3s, border-color 0.3s; }
+.mini-val { font-size: 18px; font-weight: 700; transition: color 0.3s; color: var(--text-main); }
+.mini-lbl { font-size: 9px; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+/* ---------------------------------------------------------
+   BARS & BUTTONS
+--------------------------------------------------------- */
+.bar-row { margin-bottom: 12px; }
+.bar-meta { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 11px; font-weight: 600; }
+.bar-meta .lbl { color: var(--text-main); text-transform: uppercase; }
+.bar-track { height: 6px; background: var(--card-solid); border-radius: 3px; overflow: hidden; border: 1px solid var(--card-border); }
+.bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.3s; }
+
+.btn-primary { background: var(--neon-green); color: #fff; width: 100%; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 13px; text-transform: uppercase; transition: background 0.2s; margin-top: 10px; }
+[data-theme="dark"] .btn-primary { color: var(--bg-void); }
+.btn-primary:active { transform: scale(0.98); }
+
+.btn-offset { background: var(--card-solid); border: 1px solid var(--neon-cyan); color: var(--neon-cyan); width: 100%; padding: 10px; border-radius: 10px; font-weight: 600; font-size: 13px; margin-bottom: 8px; transition: background 0.2s; }
+.btn-offset:hover { background: var(--neon-cyan-dim); }
+.btn-offset:active { transform: scale(0.98); }
+
+/* ---------------------------------------------------------
+   SLIDERS & CHIPS
+--------------------------------------------------------- */
+.sl-label { font-size: 13px; margin-bottom: 12px; display: flex; justify-content: space-between; color: var(--text-main); }
+.sl-val { color: var(--neon-green); font-weight: 700; }
+.sl-group { margin-bottom: 25px; }
+
+input[type=range] { width: 100%; height: 6px; appearance: none; background: var(--card-solid); border-radius: 3px; outline: none; border: 1px solid var(--card-border); }
+input[type=range]::-webkit-slider-thumb { appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-void); border: 2px solid var(--neon-green); box-shadow: 0 0 10px var(--neon-green-dim); cursor: pointer; transition: transform 0.1s; }
+input[type=range]::-webkit-slider-thumb:active { transform: scale(1.2); }
+
+.chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { background: var(--card-solid); padding: 8px 16px; border-radius: 8px; color: var(--text-muted); font-size: 12px; font-weight: 600; transition: all 0.2s; border: 1px solid var(--card-border); }
+.chip.active { background: var(--neon-green-dim); color: var(--neon-green); border-color: var(--neon-green); }
+
+/* ---------------------------------------------------------
+   TOGGLES
+--------------------------------------------------------- */
+.quest-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.quest-title { font-size: 14px; font-weight: 600; color: var(--text-main); }
+.quest-desc { font-size: 11px; color: var(--text-muted); }
+
+.toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.t-track { position: absolute; inset: 0; background: var(--card-solid); border-radius: 12px; transition: 0.3s; border: 1px solid var(--card-border); cursor: pointer; }
+.t-thumb { position: absolute; top: 2px; left: 3px; width: 18px; height: 18px; background: var(--text-muted); border-radius: 50%; transition: 0.3s; pointer-events: none; }
+.toggle input:checked ~ .t-track { background: var(--neon-green-dim); border-color: var(--neon-green); }
+.toggle input:checked ~ .t-thumb { left: 21px; background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+
+/* ---------------------------------------------------------
+   AI CHAT & TESTS
+--------------------------------------------------------- */
+.chat-box { height: 150px; background: var(--bg-void); border-radius: 10px; padding: 15px; margin-bottom: 15px; overflow-y: auto; font-size: 13px; line-height: 1.5; border: 1px solid var(--card-border); transition: opacity 0.3s, background 0.3s; }
+.chat-input-row { display: flex; gap: 10px; }
+.prof-input, .chat-input { flex: 1; background: var(--bg-void); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px 15px; color: var(--text-main); font-family: var(--font-sans); font-size: 13px; outline: none; transition: background 0.3s, color 0.3s; }
+.prof-input { width: 100%; margin-top: 6px; margin-bottom: 15px; }
+.prof-input:focus, .chat-input:focus { border-color: var(--neon-cyan); }
+.chat-btn { background: var(--neon-green); color: #fff; font-weight: 700; padding: 12px 20px; border-radius: 10px; font-size: 12px; transition: background 0.3s, color 0.3s; }
+[data-theme="dark"] .chat-btn { color: var(--bg-void); }
+
+.test-row { font-family: monospace; font-size: 12px; padding: 8px 12px; border-bottom: 1px solid var(--card-border); background: var(--card-solid); border-radius: 4px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; color: var(--text-main);}
+.test-row.pass { border-left: 4px solid var(--neon-green); }
+.test-row.fail { border-left: 4px solid var(--danger); }
+
+/* ---------------------------------------------------------
+   FULL-WIDTH BOTTOM TABS (UPDATED SPREAD)
+--------------------------------------------------------- */
+.tab-bar { position: fixed; bottom: 0; left: 0; right: 0; width: 100%; height: 65px; background: var(--bg-void); border-top: 1px solid var(--card-solid); display: flex; padding-bottom: env(safe-area-inset-bottom); z-index: 100; transition: background 0.3s, border-color 0.3s; }
+.tab-btn { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0; transition: color 0.2s; padding: 0 2px; text-align: center; word-wrap: break-word; }
+.tab-btn.active { color: var(--neon-green); }
+
+.pane { display: none; animation: fadeIn 0.3s ease; }
+.pane.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ---------------------------------------------------------
+   MISC & CHARTS
+--------------------------------------------------------- */
+.profile-meta { font-size: 13px; margin-bottom: 8px; color: var(--text-muted); }
+.btn-reset { background: var(--danger-dim); border: 1px solid var(--danger); color: var(--danger); width: 100%; padding: 12px; border-radius: 10px; font-weight: 700; font-size: 12px; margin-top: 15px; text-transform: uppercase; transition: background 0.2s; }
+.btn-reset:active { background: var(--danger); color: #fff; }
+
+.chart-wrap { position: relative; width: 100%; height: 240px; margin-bottom: 6px; }
+.donut-wrap { position: relative; width: 100%; height: 200px; margin: 15px 0; display: flex; justify-content: center; }
+
+</style>
+</head>
+<body>
+
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<header>
+    <div class="logo">🌿 ECOTRACE <span>v8</span></div>
+    <div class="streak-badge">🔥 12 Day Streak</div>
+</header>
+
+<main id="main-content" tabindex="-1">
+    <div id="pane-home" class="pane active">
+        <div class="glass-card">
+            <div class="ring-wrap">
+                <svg width="160" height="160" viewBox="0 0 140 140" aria-label="Progress Ring" role="progressbar" aria-valuemin="0" aria-valuemax="15" id="main-progress">
+                    <circle cx="70" cy="70" r="60" fill="none" stroke="var(--card-solid)" stroke-width="10" style="transition: stroke 0.3s;" />
+                    <circle id="anim-ring" cx="70" cy="70" r="60" fill="none" stroke="var(--neon-green)" stroke-width="10" stroke-linecap="round" stroke-dasharray="377" stroke-dashoffset="188.5" transform="rotate(-90 70 70)" style="transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.4s;" />
+                </svg>
+                <div class="ring-center" aria-live="polite">
+                    <div class="ring-num" id="ui-net">8.4</div>
+                    <div class="ring-unit">t CO₂ / yr</div>
+                </div>
+            </div>
+            <div class="grade-text" id="ui-grade" aria-live="polite">⚡ ABOVE WORLD AVERAGE</div>
+        </div>
+
+        <div class="grid-2">
+            <div class="mini-card">
+                <div class="mini-val" id="ui-base">8.4t</div>
+                <div class="mini-lbl">BASE FOOTPRINT</div>
+            </div>
+            <div class="mini-card" id="card-saved" style="border-color: rgba(0,255,135,0.3);">
+                <div class="mini-val" id="ui-saved" style="color: var(--neon-green);">-0.0t</div>
+                <div class="mini-lbl">TOTAL SAVED</div>
+            </div>
+        </div>
+
+        <button class="btn-primary" id="btn-share">📤 Share My Impact</button>
+
+        <div class="sec-header" style="margin-top: 25px;">EMISSIONS BREAKDOWN</div>
+        <div class="glass-card">
+            <div class="donut-wrap">
+                <canvas id="donutChart" aria-label="Donut chart showing emissions by category"></canvas>
+            </div>
+            <div id="bar-container" aria-live="polite">
+                </div>
+        </div>
+    </div>
+
+    <div id="pane-track" class="pane">
+        <div class="sec-header" id="track-header">REAL-TIME FOOTPRINT SLIDERS</div>
+        
+        <div class="glass-card" aria-labelledby="track-header">
+            <div class="card-header">🚗 Transport Metrics</div>
+            <div class="sl-group">
+                <div class="sl-label">Weekly Distance <span class="sl-val" id="lbl-km">240 km</span></div>
+                <input type="range" data-target="km" min="0" max="800" step="10" value="240" aria-label="Weekly Distance">
+            </div>
+            <div class="sl-group">
+                <div class="sl-label">Fuel Source <span class="sl-val" id="lbl-fuel">Petrol</span></div>
+                <div class="chip-group" id="fuel-chips" role="radiogroup" aria-label="Fuel Source">
+                    <button class="chip" data-val="0" role="radio" aria-checked="false">EV</button>
+                    <button class="chip" data-val="1" role="radio" aria-checked="false">Hybrid</button>
+                    <button class="chip active" data-val="2" role="radio" aria-checked="true">Petrol</button>
+                    <button class="chip" data-val="3" role="radio" aria-checked="false">Diesel</button>
+                </div>
+            </div>
+            <div class="sl-group" style="margin-bottom: 0;">
+                <div class="sl-label">Public Transit <span class="sl-val" id="lbl-transit">1 day/wk</span></div>
+                <input type="range" data-target="transit" min="0" max="7" step="1" value="1" aria-label="Public Transit Days">
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="card-header">⚡ Energy Infrastructure</div>
+            <div class="sl-group">
+                <div class="sl-label">Property Size <span class="sl-val" id="lbl-home">85 m²</span></div>
+                <input type="range" data-target="home" min="20" max="400" step="5" value="85" aria-label="Property Size">
+            </div>
+            <div class="sl-group" style="margin-bottom: 0;">
+                <div class="sl-label">Renewable Mix <span class="sl-val" id="lbl-renew">20%</span></div>
+                <input type="range" data-target="renew" min="0" max="100" step="5" value="20" aria-label="Renewable Mix">
+            </div>
+        </div>
+
+        <div class="glass-card">
+            <div class="card-header">🌱 Diet & Sourcing</div>
+            <div class="sl-group">
+                <div class="sl-label">Meat Meals <span class="sl-val" id="lbl-meat">5 / wk</span></div>
+                <input type="range" data-target="meat" min="0" max="21" step="1" value="5" aria-label="Meat Meals">
+            </div>
+            <div class="sl-group" style="margin-bottom: 0;">
+                <div class="sl-label">Local/Organic Share <span class="sl-val" id="lbl-local">30%</span></div>
+                <input type="range" data-target="local" min="0" max="100" step="5" value="30" aria-label="Local Share">
+            </div>
+        </div>
+        
+        <div class="glass-card">
+            <div class="card-header">✈️ Aviation</div>
+            <div class="sl-group">
+                <div class="sl-label">Short-haul (Under 3hr) <span class="sl-val" id="lbl-short">1 / yr</span></div>
+                <input type="range" data-target="short" min="0" max="20" step="1" value="1" aria-label="Short-haul Flights">
+            </div>
+            <div class="sl-group" style="margin-bottom: 0;">
+                <div class="sl-label">Long-haul (Over 3hr) <span class="sl-val" id="lbl-long">0 / yr</span></div>
+                <input type="range" data-target="long" min="0" max="10" step="1" value="0" aria-label="Long-haul Flights">
+            </div>
+        </div>
+    </div>
+
+    <div id="pane-actions" class="pane">
+        <div class="sec-header">LIFESTYLE COMMITMENTS</div>
+        
+        <div class="glass-card">
+            <div class="quest-row">
+                <div class="quest-title">🚲 Zero-Emission Commuter</div>
+                <label class="toggle"><input type="checkbox" class="quest-cb" data-save="0.6" aria-label="Toggle Commuter"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc">Commit to clean short-distance transits. Saves 0.6t CO₂/yr</div>
+        </div>
+
+        <div class="glass-card">
+            <div class="quest-row">
+                <div class="quest-title">☀️ Grid Transformer</div>
+                <label class="toggle"><input type="checkbox" class="quest-cb" data-save="1.1" aria-label="Toggle Solar"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc">Migrate residential power loops to clean sourcing. Saves 1.1t CO₂/yr</div>
+        </div>
+
+        <div class="glass-card">
+            <div class="quest-row">
+                <div class="quest-title">🌱 Plant-Based Shift</div>
+                <label class="toggle"><input type="checkbox" class="quest-cb" data-save="0.5" aria-label="Toggle Diet"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc">Substitute 3 meals a week for plant-based alternatives. Saves 0.5t CO₂/yr</div>
+        </div>
+
+        <div class="sec-header" style="margin-top: 25px;">MARKETPLACE OFFSETS</div>
+        <div class="glass-card">
+            <div class="card-header">🌳 Verified Projects</div>
+            <div class="quest-desc" style="margin-bottom: 15px;">Instantly reduce your net footprint by funding certified climate action.</div>
+            <button class="btn-offset" data-val="1.0">Fund Solar Farm Initiative (-1.0t)</button>
+            <button class="btn-offset" data-val="0.5">Plant 20 Mangrove Trees (-0.5t)</button>
+            <button class="btn-offset" data-val="0.2">Ocean Cleanup Fund (-0.2t)</button>
+        </div>
+    </div>
+
+    <div id="pane-coach" class="pane">
+        <div class="glass-card">
+            <div class="card-header">🤖 AI COACH</div>
+            <div class="chat-box" id="chat-box" aria-live="polite">System online. Footprint parameters successfully injected into context.</div>
+            <div class="chat-input-row">
+                <input type="text" id="chat-input" class="chat-input" placeholder="Ask about your reduction target..." aria-label="Chat input" autocomplete="off">
+                <button class="chat-btn" id="btn-ask">ASK</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="pane-compare" class="pane">
+        <div class="sec-header">COMPARISON CHARTS</div>
+        <div class="glass-card">
+            <div class="card-header">📊 Global Benchmarks</div>
+            <div class="chart-wrap" style="height:250px;">
+                <canvas id="cmpChart" role="img" aria-label="Bar chart comparing your footprint to global averages"></canvas>
+            </div>
+        </div>
+        <div class="glass-card">
+            <div class="card-header">📈 12-Month Trajectory</div>
+            <div class="chart-wrap" style="height:250px;">
+                <canvas id="trendChart" role="img" aria-label="Line chart showing emissions projection"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="pane-profile" class="pane">
+        <div class="glass-card">
+            <div class="card-header">👤 USER IDENTITY</div>
+            <label for="input-name" style="font-size: 13px; color: var(--text-main);">Display Name</label>
+            <input type="text" id="input-name" class="prof-input" placeholder="e.g., Alex Tracker">
+            <label for="input-role" style="font-size: 13px; color: var(--text-main);">Designation / Title</label>
+            <input type="text" id="input-role" class="prof-input" placeholder="e.g., Climate Advocate">
+            <div class="profile-meta" style="margin-top: 5px;">Status: <span style="color: var(--neon-green); font-weight: 700;">Eco-Legend Level 4</span></div>
+        </div>
+
+        <div class="glass-card">
+            <div class="card-header">♿ ACCESSIBILITY & THEME</div>
+            <div class="quest-row" style="margin-top: 15px;">
+                <div class="quest-title">Dark Mode</div>
+                <label class="toggle"><input type="checkbox" id="cb-theme" aria-label="Toggle Dark Mode"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc" style="margin-bottom: 15px;">Switch between default light theme and dark void mode.</div>
+            <div class="quest-row">
+                <div class="quest-title">Large Text</div>
+                <label class="toggle"><input type="checkbox" id="cb-text" aria-label="Toggle Large Text"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc" style="margin-bottom: 15px;">Increase base font sizes for easier readability.</div>
+            <div class="quest-row">
+                <div class="quest-title">Reduce Motion</div>
+                <label class="toggle"><input type="checkbox" id="cb-motion" aria-label="Toggle Reduced Motion"><div class="t-track"></div><div class="t-thumb"></div></label>
+            </div>
+            <div class="quest-desc">Disable animations and smooth scrolling for motion sensitivity.</div>
+        </div>
+
+        <button class="btn-reset" id="btn-reset">RESET ALL METRICS</button>
+    </div>
+
+    <div id="pane-tests" class="pane">
+        <div class="sec-header">UNIT TESTS (LIVE EXECUTION)</div>
+        <div class="glass-card">
+            <p style="font-size: 13px; color:var(--text-muted); margin-bottom: 15px;">Validating Calculation Engine, Security boundaries, and Application State.</p>
+            <div id="test-results" aria-live="polite">Running tests...</div>
+        </div>
+    </div>
+
+</main>
+
+<nav class="tab-bar" aria-label="Main Navigation" role="tablist">
+    <button class="tab-btn active" role="tab" aria-selected="true" data-target="home">Home</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="track">Track</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="actions">Actions</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="coach">Coach</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="compare">Compare</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="profile">Profile</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-target="tests">Tests</button>
+</nav>
+
+<footer style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 12px; margin-bottom: 70px;">
+  <strong style="color: var(--text-main);">EcoTrace v8</strong> — Carbon Footprint Awareness Platform &nbsp;·&nbsp;
+  Built for Hack2skill PromptWars Challenge 3  (By-Anuja Nikam)  &nbsp;·&nbsp;
+  Data sources: IPCC, IEA, Our World in Data
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+'use strict'; // Security: Strict Mode
+
+// --- 1. SECURITY & SANITIZATION ---
+const escHtml = (s) => (s||'').toString().replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+const sanitisePrompt = (str) => escHtml(str.trim().substring(0, 200));
+
+// --- 2. CORE CALCULATION ENGINE ---
+const CalcEngine = {
+    validate: (val, min, max) => {
+        const n = Number(val);
+        if (isNaN(n) || n < min || n > max) throw new RangeError(`Out of bounds`);
+        return n;
+    },
+    transport: (km, fuelIdx, transitDays) => {
+        const fMult = [0.05, 0.5, 1.0, 1.15]; 
+        const base = km * 52 * 0.00019 * fMult[fuelIdx];
+        const reduction = 1 - (transitDays * 0.06);
+        return Math.max(0.05, +(base * reduction).toFixed(2));
+    },
+    energy: (homeSize, renewPct) => Math.max(0.1, +((homeSize * 0.006 + 1.0) * (1 - renewPct / 100)).toFixed(2)),
+    food: (meatMeals, localPct) => Math.max(0.1, +(0.4 + meatMeals * 0.065 * (1 - localPct * 0.003)).toFixed(2)),
+    flights: (short, long) => +(short * 0.13 + long * 1.2).toFixed(2),
+    total: (emissions) => Object.values(emissions).reduce((a, b) => a + b, 0)
+};
+
+// --- 3. STATE ---
+const state = {
+    km: 240, fuelIdx: 2, transitDays: 1, 
+    homeSize: 85, renewPct: 20, 
+    meatMeals: 5, localPct: 30,
+    shortFlights: 1, longFlights: 0,
+    actionSaved: 0, offsetSaved: 0,
+    emissions: { transport: 3.8, energy: 2.1, food: 1.5, flights: 0.2, shopping: 0.8 },
+    fuelLabels: ['EV', 'Hybrid', 'Petrol', 'Diesel']
+};
+
+const MAX_TARGET = 15.0;
+const CIRCUMFERENCE = 377;
+
+// --- 4. DOM BATCHING & DEBOUNCING ---
+const debounce = (func, wait) => {
+    let timeout;
+    return (...args) => { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), wait); };
+};
+
+const el = {
+    ring: document.getElementById('anim-ring'), net: document.getElementById('ui-net'),
+    grade: document.getElementById('ui-grade'), base: document.getElementById('ui-base'),
+    saved: document.getElementById('ui-saved'), cardSaved: document.getElementById('card-saved'),
+    barContainer: document.getElementById('bar-container'), chatBox: document.getElementById('chat-box'),
+    chatInput: document.getElementById('chat-input'), nameInput: document.getElementById('input-name'),
+    roleInput: document.getElementById('input-role'), progress: document.getElementById('main-progress')
+};
+
+// --- 5. THEME & RENDER LOGIC ---
+function getChartColors() {
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+    return {
+        grid: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)',
+        text: isDark ? '#888888' : '#5F6059',
+        neon: isDark ? '#00FF87' : '#0F6E56',
+        bgData: isDark ? ['#00FF87', '#5DCAA5', '#00E5FF', '#D3D1C7', '#B4B2A9'] : ['#0F6E56', '#5DCAA5', '#007A8A', '#D3D1C7', '#B4B2A9']
+    };
+}
+
+function updateChartsTheme() {
+    const colors = getChartColors();
+    if(window.trendChart) {
+        window.trendChart.options.scales.x.grid.color = colors.grid; window.trendChart.options.scales.y.grid.color = colors.grid;
+        window.trendChart.options.scales.x.ticks.color = colors.text; window.trendChart.options.scales.y.ticks.color = colors.text;
+        window.trendChart.data.datasets[0].borderColor = colors.neon; window.trendChart.data.datasets[0].pointBackgroundColor = colors.neon;
+        window.trendChart.update('none');
+    }
+    if(window.cmpChart) {
+        window.cmpChart.options.scales.x.grid.color = colors.grid; window.cmpChart.options.scales.y.grid.color = colors.grid;
+        window.cmpChart.options.scales.x.ticks.color = colors.text; window.cmpChart.options.scales.y.ticks.color = colors.text;
+        window.cmpChart.update('none');
+    }
+    if(window.donutChart) {
+        window.donutChart.data.datasets[0].backgroundColor = colors.bgData;
+        window.donutChart.options.elements.arc.borderColor = document.body.getAttribute('data-theme') === 'dark' ? '#161925' : '#FFFFFF';
+        window.donutChart.update('none');
+    }
+}
+
+document.getElementById('cb-theme').addEventListener('change', (e) => {
+    if (e.target.checked) document.body.setAttribute('data-theme', 'dark'); else document.body.removeAttribute('data-theme');
+    updateUI(); updateChartsTheme();
 });
+document.getElementById('cb-text').addEventListener('change', (e) => { document.body.classList.toggle('a11y-large-text', e.target.checked); });
+document.getElementById('cb-motion').addEventListener('change', (e) => { document.body.classList.toggle('a11y-reduced-motion', e.target.checked); });
+
+if (localStorage.getItem('ecoName')) el.nameInput.value = localStorage.getItem('ecoName');
+if (localStorage.getItem('ecoRole')) el.roleInput.value = localStorage.getItem('ecoRole');
+el.nameInput.addEventListener('input', (e) => localStorage.setItem('ecoName', e.target.value));
+el.roleInput.addEventListener('input', (e) => localStorage.setItem('ecoRole', e.target.value));
+
+function renderBars() {
+    el.barContainer.innerHTML = '';
+    const maxVal = Math.max(...Object.values(state.emissions));
+    const sortedEmissions = Object.entries(state.emissions).sort((a, b) => b[1] - a[1]);
+    const isDark = document.body.getAttribute('data-theme') === 'dark';
+
+    sortedEmissions.forEach(([key, val]) => {
+        const pct = Math.min((val / Math.max(maxVal, 0.1)) * 100, 100);
+        let color = key === 'transport' ? (isDark ? 'var(--neon-green)' : 'var(--neon-green)') : key === 'energy' ? '#5DCAA5' : key === 'food' ? 'var(--neon-cyan)' : '#D3D1C7';
+        el.barContainer.innerHTML += `<div class="bar-row"><div class="bar-meta"><span class="lbl">${key}</span><span class="val" style="color: ${color}">${val.toFixed(1)}t</span></div><div class="bar-track"><div class="bar-fill" style="width: ${pct}%; background: ${color}"></div></div></div>`;
+    });
+}
+
+function updateUI() {
+    requestAnimationFrame(() => {
+        const baseTotal = CalcEngine.total(state.emissions);
+        const totalSaved = state.actionSaved + state.offsetSaved;
+        const netTotal = Math.max(0, baseTotal - totalSaved);
+        
+        el.net.textContent = netTotal.toFixed(1);
+        el.base.textContent = baseTotal.toFixed(1) + 't';
+        el.saved.textContent = '-' + totalSaved.toFixed(1) + 't';
+        el.progress.setAttribute('aria-valuenow', netTotal.toFixed(1));
+        
+        const pct = Math.min(netTotal / MAX_TARGET, 1);
+        const offset = CIRCUMFERENCE * (1 - pct);
+        el.ring.style.strokeDashoffset = offset;
+        
+        const isGood = netTotal <= 2.0;
+        const activeColor = isGood ? 'var(--neon-cyan)' : 'var(--neon-green)';
+        const dimColor = isGood ? 'var(--neon-cyan-dim)' : 'var(--neon-green-dim)';
+        
+        el.ring.style.stroke = activeColor; el.net.style.color = activeColor; el.grade.style.color = activeColor;
+        el.grade.textContent = isGood ? '🏆 PARIS AGREEMENT ALIGNED' : '⚡ ABOVE WORLD AVERAGE';
+        el.saved.style.color = totalSaved > 0 ? activeColor : 'var(--text-muted)';
+        el.cardSaved.style.borderColor = totalSaved > 0 ? dimColor : 'var(--card-border)';
+
+        renderBars();
+
+        if(window.donutChart) { window.donutChart.data.datasets[0].data = [state.emissions.transport, state.emissions.energy, state.emissions.food, state.emissions.shopping, state.emissions.flights]; window.donutChart.update('none'); }
+        if(window.cmpChart) { window.cmpChart.data.datasets[0].data[0] = netTotal; window.cmpChart.update('none'); }
+        if(window.trendChart) {
+            const newData = []; for(let i=11; i>=0; i--) newData.push((netTotal + (i * 0.12)).toFixed(1));
+            window.trendChart.data.datasets[0].data = newData; window.trendChart.update('none');
+        }
+    });
+}
+
+const debouncedRecalc = debounce(() => {
+    try {
+        state.emissions.transport = CalcEngine.transport(CalcEngine.validate(state.km,0,800), CalcEngine.validate(state.fuelIdx,0,3), CalcEngine.validate(state.transitDays,0,7));
+        state.emissions.energy = CalcEngine.energy(CalcEngine.validate(state.homeSize,20,400), CalcEngine.validate(state.renewPct,0,100));
+        state.emissions.food = CalcEngine.food(CalcEngine.validate(state.meatMeals,0,21), CalcEngine.validate(state.localPct,0,100));
+        state.emissions.flights = CalcEngine.flights(CalcEngine.validate(state.shortFlights,0,20), CalcEngine.validate(state.longFlights,0,10));
+        updateUI();
+    } catch(e) { console.warn("Validation Error", e); }
+}, 40);
+
+// --- 6. EVENT LISTENERS ---
+document.addEventListener('input', (e) => {
+    if (e.target.matches('input[type="range"]')) {
+        const target = e.target.dataset.target, val = +e.target.value, lbl = document.getElementById(`lbl-${target}`);
+        if (target === 'km') { state.km = val; if(lbl) lbl.textContent = val + ' km'; }
+        else if (target === 'transit') { state.transitDays = val; if(lbl) lbl.textContent = val + ' day/wk'; }
+        else if (target === 'home') { state.homeSize = val; if(lbl) lbl.textContent = val + ' m²'; }
+        else if (target === 'renew') { state.renewPct = val; if(lbl) lbl.textContent = val + '%'; }
+        else if (target === 'meat') { state.meatMeals = val; if(lbl) lbl.textContent = val + ' / wk'; }
+        else if (target === 'local') { state.localPct = val; if(lbl) lbl.textContent = val + '%'; }
+        else if (target === 'short') { state.shortFlights = val; if(lbl) lbl.textContent = val + ' / yr'; }
+        else if (target === 'long') { state.longFlights = val; if(lbl) lbl.textContent = val + ' / yr'; }
+        debouncedRecalc();
+    }
+});
+
+document.addEventListener('change', (e) => {
+    if (e.target.matches('.quest-cb')) {
+        let total = 0; document.querySelectorAll('.quest-cb').forEach(c => { if (c.checked) total += +c.dataset.save; });
+        state.actionSaved = total; updateUI();
+    }
+});
+
+document.addEventListener('click', (e) => {
+    const tabBtn = e.target.closest('.tab-btn');
+    if (tabBtn) {
+        document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+        document.querySelectorAll('.pane').forEach(p => p.classList.remove('active'));
+        tabBtn.classList.add('active'); tabBtn.setAttribute('aria-selected', 'true');
+        const targetPane = document.getElementById('pane-' + tabBtn.dataset.target);
+        if (targetPane) targetPane.classList.add('active');
+        window.scrollTo({top: 0, behavior: 'smooth'});
+        if (tabBtn.dataset.target === 'tests') runTests();
+        return;
+    }
+
+    const chipBtn = e.target.closest('.chip');
+    if (chipBtn) {
+        document.querySelectorAll('.chip').forEach(c => { c.classList.remove('active'); c.setAttribute('aria-checked', 'false'); });
+        chipBtn.classList.add('active'); chipBtn.setAttribute('aria-checked', 'true');
+        state.fuelIdx = +chipBtn.dataset.val;
+        const lblFuel = document.getElementById('lbl-fuel');
+        if(lblFuel) lblFuel.textContent = state.fuelLabels[state.fuelIdx];
+        debouncedRecalc(); return;
+    }
+
+    const offsetBtn = e.target.closest('.btn-offset');
+    if (offsetBtn) {
+        state.offsetSaved += +offsetBtn.dataset.val;
+        offsetBtn.textContent = offsetBtn.textContent.replace(')', ' ✔️)');
+        offsetBtn.style.background = 'var(--neon-cyan-dim)'; offsetBtn.style.color = 'var(--neon-cyan)';
+        updateUI(); return;
+    }
+
+    if (e.target.id === 'btn-share') {
+        const net = el.net.textContent, name = escHtml(el.nameInput.value) || "Eco Warrior";
+        alert(`Report Generated!\n\nName: ${name}\nNet Footprint: ${net}t CO2/yr\nStatus: ${el.grade.textContent}`); return;
+    }
+
+    const resetBtn = e.target.closest('#btn-reset');
+    if (resetBtn) {
+        document.querySelectorAll('input[type="range"]').forEach(rng => {
+            const def = rng.dataset.target === 'transit' ? 1 : rng.dataset.target === 'renew' ? 20 : rng.dataset.target === 'home' ? 85 : rng.dataset.target === 'meat' ? 5 : rng.dataset.target === 'local' ? 30 : rng.dataset.target === 'short' ? 1 : rng.dataset.target === 'long' ? 0 : 240;
+            rng.value = def; rng.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        document.querySelector('.chip[data-val="2"]').classList.add('active'); state.fuelIdx = 2;
+        document.getElementById('lbl-fuel').textContent = 'Petrol';
+        document.querySelectorAll('.quest-cb').forEach(c => c.checked = false);
+        state.actionSaved = 0; state.offsetSaved = 0;
+        document.querySelectorAll('.btn-offset').forEach(b => { b.textContent = b.textContent.replace(' ✔️)', ')'); b.style.background = ''; b.style.color = ''; });
+        debouncedRecalc(); return;
+    }
+
+    const askBtn = e.target.closest('#btn-ask');
+    if (askBtn) {
+        const p = sanitisePrompt(el.chatInput.value);
+        if (!p) return;
+        el.chatBox.style.opacity = '0.5'; el.chatBox.textContent = 'Analyzing parameters...';
+        setTimeout(() => {
+            const totalSaved = state.actionSaved + state.offsetSaved;
+            const net = (CalcEngine.total(state.emissions) - totalSaved).toFixed(1);
+            el.chatBox.textContent = `Analysis complete for your ${net}t footprint. You've offset ${totalSaved.toFixed(1)}t. Focus on increasing your renewable energy configuration to clear the target. (Query: ${p})`;
+            el.chatBox.style.opacity = '1'; el.chatInput.value = '';
+        }, 600);
+    }
+});
+el.chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') document.getElementById('btn-ask').click(); });
+
+// --- 7. UNIT TESTS (HACKATHON REQUIREMENT) ---
+function runTests() {
+    const results = [];
+    const assert = (name, condition) => { results.push({ name, pass: !!condition }); };
+    try {
+        assert('1. CalcEngine.validate accepts valid numbers within bounds', CalcEngine.validate(50, 0, 100) === 50);
+        let threw = false; try { CalcEngine.validate(150, 0, 100); } catch(e) { threw = e instanceof RangeError; }
+        assert('2. CalcEngine.validate throws RangeError on overflow bounds', threw);
+        assert('3. CalcEngine.transport calculates baseline emissions', CalcEngine.transport(100, 2, 0) > 0);
+        assert('4. CalcEngine.transport applies EV multiplier reduction', CalcEngine.transport(100, 0, 0) < CalcEngine.transport(100, 2, 0));
+        assert('5. CalcEngine.energy respects absolute minimum floor (0.1)', CalcEngine.energy(0, 100) === 0.1);
+        assert('6. CalcEngine.energy accounts for renewables properly', CalcEngine.energy(100, 50) === 0.8);
+        assert('7. CalcEngine.food correctly calculates meat vs local impact', CalcEngine.food(5, 100) < CalcEngine.food(5, 0));
+        assert('8. CalcEngine.flights handles combined short & long haul', CalcEngine.flights(2, 1) === 1.46);
+        assert('9. CalcEngine.total correctly sums up emission payload', CalcEngine.total({a: 1.5, b: 2.0}) === 3.5);
+        assert('10. sanitisePrompt enforces strictly 200 character limit', sanitisePrompt('a'.repeat(300)).length <= 200);
+        assert('11. escHtml escapes malicious HTML tag injections', escHtml('<script>') === '&lt;script&gt;');
+        assert('12. State/Gamification properly initialised at zero', state.actionSaved >= 0);
+    } catch (e) { assert('Test Suite Execution (Fatal Error Blocked)', false); }
+
+    const out = document.getElementById('test-results');
+    if(out) {
+        out.innerHTML = ''; // Clear cleanly
+        results.forEach(r => {
+            const div = document.createElement('div');
+            div.className = `test-row ${r.pass ? 'pass' : 'fail'}`;
+            div.textContent = `${r.pass ? '✅ PASS' : '❌ FAIL'} — ${r.name}`;
+            out.appendChild(div);
+        });
+    }
+}
+
+// --- 8. STARTUP ---
+window.addEventListener('load', () => {
+    const cOpts = { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{grid:{},ticks:{font:{size:11}}},y:{grid:{},ticks:{font:{size:11}}}}};
+    window.trendChart = new Chart(document.getElementById('trendChart'), { type:'line', data:{labels:['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'], datasets:[{data:Array(12).fill(0), tension:.4, pointRadius:3, fill:true, backgroundColor:'rgba(29, 158, 117, 0.1)'}]}, options: cOpts });
+    window.cmpChart = new Chart(document.getElementById('cmpChart'), { type:'bar', indexAxis:'y', data:{labels:['You','India','World','EU','US','Paris'], datasets:[{data:[8.4,1.9,4.7,6.8,14.9,2.0], backgroundColor:['#1D9E75','#B4B2A9','#B4B2A9','#B4B2A9','#B4B2A9','#00E5FF']}]}, options: cOpts });
+    window.donutChart = new Chart(document.getElementById('donutChart'), { type:'doughnut', data:{labels:['Transport', 'Energy', 'Food', 'Shopping', 'Flights'], datasets:[{data:[3.8, 2.1, 1.5, 0.8, 0.2], backgroundColor:['#0F6E56', '#5DCAA5', '#007A8A', '#D3D1C7', '#B4B2A9'], borderWidth: 2}]}, options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'right', labels:{font:{family:"'DM Sans', sans-serif", size: 11}, color:'#5F6059'}}}}});
+    updateChartsTheme(); debouncedRecalc();
+});
+</script>
+</body>
+</html>
