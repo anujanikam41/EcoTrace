@@ -1,0 +1,413 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  StyleSheet, 
+  Text, 
+  View, 
+  ScrollView, 
+  TouchableOpacity, 
+  TextInput, 
+  Switch, 
+  Dimensions, 
+  SafeAreaView, 
+  StatusBar,
+  Animated
+} from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+
+const { width } = Dimensions.get('window');
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// ---------------------------------------------------------
+// 1. Pure Core Calculation Engine
+// ---------------------------------------------------------
+const CalcEngine = {
+  transport: (km, fuelType, transitDays) => {
+    const fMult = { EV: 0.05, Hybrid: 0.5, Petrol: 1.0, Diesel: 1.15 };
+    const base = km * 52 * 0.00019 * (fMult[fuelType] || 1.0);
+    const reduction = 1 - (transitDays * 0.06);
+    return Math.max(0.05, +(base * reduction).toFixed(2));
+  },
+  energy: (homeSize, renewPct) => {
+    return Math.max(0.1, +((homeSize * 0.006 + 1.0) * (1 - renewPct / 100)).toFixed(2));
+  },
+  food: (meatMeals) => {
+    return Math.max(0.1, +(0.4 + meatMeals * 0.065).toFixed(2));
+  },
+  flights: (short, long) => {
+    return +(short * 0.13 + long * 1.2).toFixed(2);
+  }
+};
+
+export default function App() {
+  // Navigation & View Tabs
+  const [currentTab, setCurrentTab] = useState('Home'); // Home, Track, Coach, Quests, Profile
+  
+  // Application Global Tracking State
+  const [km, setKm] = useState(240);
+  const [fuelType, setFuelType] = useState('Petrol');
+  const [transitDays, setTransitDays] = useState(1);
+  const [homeSize, setHomeSize] = useState(85);
+  const [renewPct, setRenewPct] = useState(20);
+  const [meatMeals, setMeatMeals] = useState(5);
+  const [shortFlights, setShortFlights] = useState(1);
+  const [longFlights, setLongFlights] = useState(0);
+
+  // Actions & Quests State
+  const [commitments, setCommitments] = useState({
+    cycle: false,
+    greenEnergy: false,
+    lessMeat: false,
+  });
+  
+  // AI Coach Stream State
+  const [chatInput, setChatInput] = useState('');
+  const [chatResponse, setChatResponse] = useState('System online. Footprint parameters successfully injected into context.');
+
+  // Live Footprint Metrics
+  const [emissions, setEmissions] = useState({ transport: 3.8, energy: 2.1, food: 1.5, flights: 0.2, shopping: 0.8 });
+  const [saved, setSaved] = useState(0);
+  
+  // SVG Ring Animation Parameters
+  const animatedValue = useRef(new Animated.Value(0)).current;
+  const radius = 60;
+  const strokeWidth = 10;
+  const circumference = 2 * Math.PI * radius;
+
+  // Recalculate values dynamically when inputs change
+  useEffect(() => {
+    const t = CalcEngine.transport(km, fuelType, transitDays);
+    const e = CalcEngine.energy(homeSize, renewPct);
+    const f = CalcEngine.food(meatMeals);
+    const fl = CalcEngine.flights(shortFlights, longFlights);
+    
+    setEmissions({ transport: t, energy: e, food: f, flights: fl, shopping: 0.8 });
+  }, [km, fuelType, transitDays, homeSize, renewPct, meatMeals, shortFlights, longFlights]);
+
+  // Compute live net totals
+  const baseTotal = Object.values(emissions).reduce((a, b) => a + b, 0);
+  const netTotal = Math.max(0, baseTotal - saved);
+  const maxTarget = 15.0; // Benchmark cap for percentage calculations
+  const targetPct = Math.min(netTotal / maxTarget, 1);
+
+  // Animate the SVG Ring on footprint shifts
+  useEffect(() => {
+    Animated.timing(animatedValue, {
+      toValue: 1 - targetPct,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [netTotal]);
+
+  const strokeDashoffset = animatedValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: [circumference, 0],
+  });
+
+  // Handle commitment toggles
+  const toggleCommitment = (key, val) => {
+    setCommitments(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      let newSaved = 0;
+      if (next.cycle) newSaved += 0.6;
+      if (next.greenEnergy) newSaved += 1.1;
+      if (next.lessMeat) newSaved += 0.5;
+      setSaved(newSaved);
+      return next;
+    });
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+      
+      {/* HEADER BAR */}
+      <View style={styles.header}>
+        <Text style={styles.logoText}>🌿 ECOTRACE <Text style={styles.v2Text}>v2</Text></Text>
+        <View style={styles.streakBadge}>
+          <Text style={styles.streakText}>🔥 12 Day Streak</Text>
+        </View>
+      </View>
+
+      {/* CORE VIEWPORT */}
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        
+        {/* TAB 1: HOME */}
+        {currentTab === 'Home' && (
+          <View>
+            {/* VIRTUAL GLASSMORPHIC RING CARD */}
+            <View style={styles.glassCard}>
+              <View style={styles.ringContainer}>
+                <Svg width="160" height="160" viewBox="0 0 140 140">
+                  <Circle cx="70" cy="70" r={radius} fill="none" stroke="#161925" strokeWidth={strokeWidth} />
+                  <AnimatedCircle 
+                    cx="70" cy="70" r={radius} fill="none" 
+                    stroke={netTotal <= 2.0 ? '#00E5FF' : '#00FF87'} 
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    transform="rotate(-90 70 70)"
+                  />
+                </Svg>
+                <View style={styles.ringCenterText}>
+                  <Text style={styles.totalNum}>{netTotal.toFixed(1)}</Text>
+                  <Text style={styles.totalUnit}>t CO₂ / yr</Text>
+                </View>
+              </View>
+              <Text style={styles.gradeText}>
+                {netTotal <= 2.0 ? '🏆 PARIS AGREEMENT ALIGNED' : '⚡ ABOVE WORLD AVERAGE'}
+              </Text>
+            </View>
+
+            {/* QUICK ACTIONS STATS GRID */}
+            <View style={styles.grid}>
+              <View style={styles.miniCard}>
+                <Text style={styles.miniVal}>{baseTotal.toFixed(1)}t</Text>
+                <Text style={styles.miniLbl}>BASE FOOTPRINT</Text>
+              </View>
+              <View style={[styles.miniCard, { borderColor: '#00FF87' }]}>
+                <Text style={[styles.miniVal, { color: '#00FF87' }]}>-{saved.toFixed(1)}t</Text>
+                <Text style={styles.miniLbl}>TOTAL SAVED</Text>
+              </View>
+            </View>
+
+            {/* EMISSIONS BREAKDOWN BREAKDOWN */}
+            <Text style={styles.sectionHeader}>LIVE EMISSIONS MIX</Text>
+            {Object.entries(emissions).map(([key, val]) => (
+              <View key={key} style={styles.barContainer}>
+                <View style={styles.barLabelRow}>
+                  <Text style={styles.barLabel}>{key.toUpperCase()}</Text>
+                  <Text style={styles.barValue}>{val.toFixed(1)}t</Text>
+                </View>
+                <View style={styles.barTrack}>
+                  <View style={[styles.barFill, { width: `${Math.min((val / 6) * 100, 100)}%` }]} />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* TAB 2: TRACK */}
+        {currentTab === 'Track' && (
+          <View>
+            <Text style={styles.sectionHeader}>REAL-TIME footprint SLIDERS</Text>
+            
+            {/* TRANSPORT CONFIG */}
+            <View style={styles.glassCard}>
+              <Text style={styles.cardHeader}>🚗 Transport Metrics</Text>
+              <Text style={styles.sliderLabel}>Weekly Distance: <Text style={styles.neonText}>{km} km</Text></Text>
+              {/* Note: Standard slider requires React Native Slider package. Native text fallback configuration showcased */}
+              <View style={styles.mockSliderRow}>
+                <TouchableOpacity onPress={() => setKm(Math.max(0, km - 40))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setKm(Math.min(800, km + 40))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
+              </View>
+
+              <Text style={styles.sliderLabel}>Fuel Source: <Text style={styles.neonText}>{fuelType}</Text></Text>
+              <View style={styles.toggleGroup}>
+                {['EV', 'Hybrid', 'Petrol', 'Diesel'].map(f => (
+                  <TouchableOpacity 
+                    key={f} 
+                    style={[styles.chip, fuelType === f && styles.activeChip]} 
+                    onPress={() => setFuelType(f)}
+                  >
+                    <Text style={[styles.chipText, fuelType === f && styles.activeChipText]}>{f}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* HOME ENERGY CONFIG */}
+            <View style={styles.glassCard}>
+              <Text style={styles.cardHeader}>⚡ Energy Infrastructure</Text>
+              <Text style={styles.sliderLabel}>Property Size: <Text style={styles.neonText}>{homeSize} m²</Text></Text>
+              <View style={styles.mockSliderRow}>
+                <TouchableOpacity onPress={() => setHomeSize(Math.max(20, homeSize - 10))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setHomeSize(Math.min(400, homeSize + 10))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
+              </View>
+
+              <Text style={styles.sliderLabel}>Renewable Energy Mix: <Text style={styles.neonText}>{renewPct}%</Text></Text>
+              <View style={styles.mockSliderRow}>
+                <TouchableOpacity onPress={() => setRenewPct(Math.max(0, renewPct - 10))} style={styles.stepBtn}><Text style={styles.btnText}>-</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setRenewPct(Math.min(100, renewPct + 10))} style={styles.stepBtn}><Text style={styles.btnText}>+</Text></TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* TAB 3: COACH (AI MULTI-TURN) */}
+        {currentTab === 'Coach' && (
+          <View style={styles.glassCard}>
+            <Text style={styles.cardHeader}>🤖 CLAUDE AI COACH</Text>
+            <ScrollView style={styles.chatBox}>
+              <Text style={styles.chatMessage}>{chatResponse}</Text>
+            </ScrollView>
+            <View style={styles.inputRow}>
+              <TextInput 
+                style={styles.chatInput} 
+                placeholder="Ask about your reduction target..." 
+                placeholderTextColor="#61615A"
+                value={chatInput}
+                onChangeText={setChatInput}
+              />
+              <TouchableOpacity style={styles.sendBtn} onPress={() => {
+                setChatResponse(`Analysis complete for your ${netTotal.toFixed(1)}t footprint. Prioritize increasing your renewable energy configuration to clear the current target.`);
+                setChatInput('');
+              }}>
+                <Text style={styles.sendBtnText}>ASK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* TAB 4: QUESTS */}
+        {currentTab === 'Quests' && (
+          <View>
+            <Text style={styles.sectionHeader}>ACTIVE ECO-CHALLENGES</Text>
+            <View style={styles.glassCard}>
+              <View style={styles.questRow}>
+                <Text style={styles.questTitle}>🚲 Zero-Emission Commuter</Text>
+                <Switch 
+                  value={commitments.cycle} 
+                  onValueChange={() => toggleCommitment('cycle')} 
+                  thumbColor={commitments.cycle ? '#00FF87' : '#2E2F2B'}
+                />
+              </View>
+              <Text style={styles.questDesc}>Commit to clean short-distance transits. Saves 0.6t CO₂/yr (+25 XP)</Text>
+            </View>
+
+            <View style={styles.glassCard}>
+              <View style={styles.questRow}>
+                <Text style={styles.questTitle}>☀️ Grid Transformer</Text>
+                <Switch 
+                  value={commitments.greenEnergy} 
+                  onValueChange={() => toggleCommitment('greenEnergy')}
+                  thumbColor={commitments.greenEnergy ? '#00FF87' : '#2E2F2B'}
+                />
+              </View>
+              <Text style={styles.questDesc}>Migrate residential power loops to clean sourcing. Saves 1.1t CO₂/yr (+25 XP)</Text>
+            </View>
+          </View>
+        )}
+
+        {/* TAB 5: PROFILE */}
+        {currentTab === 'Profile' && (
+          <View style={styles.glassCard}>
+            <Text style={styles.cardHeader}>👤 EMISSIONS PROFILE IDENT</Text>
+            <Text style={styles.profileMeta}>Status: <Text style={styles.neonText}>Eco-Legend Level 4</Text></Text>
+            <Text style={styles.profileMeta}>Total Active Trackers: <Text style={styles.cyanText}>4 Screen Stack Node</Text></Text>
+            <TouchableOpacity style={styles.resetBtn} onPress={() => {
+              setKm(240); setFuelType('Petrol'); setTransitDays(1); setHomeSize(85); setRenewPct(20);
+            }}>
+              <Text style={styles.resetBtnText}>RESET CORE SCHEMATICS</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+      </ScrollView>
+
+      {/* FOOTER NAVIGATION TABS */}
+      <View style={styles.tabBar}>
+        {['Home', 'Track', 'Coach', 'Quests', 'Profile'].map(tab => (
+          <TouchableOpacity 
+            key={tab} 
+            style={styles.tabItem} 
+            onPress={() => setCurrentTab(tab)}
+          >
+            <Text style={[styles.tabText, currentTab === tab && styles.activeTabText]}>{tab}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------
+// 2. Bold Eco-Futuristic Styles (Deep Void + Neon Green/Cyan)
+// ---------------------------------------------------------
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#090A0F' },
+  scrollContainer: { padding: 20, paddingBottom: 100 },
+  header: { 
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
+    alignItems: 'center', 
+    paddingHorizontal: 20, 
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderColor: '#161925'
+  },
+  logoText: { color: '#ffffff', fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  v2Text: { color: '#00FF87', fontSize: 12 },
+  streakBadge: { backgroundColor: '#161925', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  streakText: { color: '#00E5FF', fontSize: 11, fontWeight: '600' },
+  glassCard: { 
+    backgroundColor: 'rgba(22, 25, 37, 0.7)', 
+    borderRadius: 20, 
+    padding: 20, 
+    marginBottom: 15, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.05)' 
+  },
+  ringContainer: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  ringCenterText: { position: 'absolute', alignItems: 'center' },
+  totalNum: { color: '#ffffff', fontSize: 36, fontWeight: '800' },
+  totalUnit: { color: '#61615A', fontSize: 11, marginTop: 2 },
+  gradeText: { color: '#00FF87', fontSize: 11, fontWeight: '700', textAlign: 'center', marginTop: 15, letterSpacing: 0.5 },
+  grid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 15 },
+  miniCard: { 
+    backgroundColor: '#161925', 
+    width: '48%', 
+    borderRadius: 14, 
+    padding: 15, 
+    borderWidth: 1, 
+    borderColor: 'rgba(255, 255, 255, 0.03)' 
+  },
+  miniVal: { color: '#ffffff', fontSize: 18, fontWeight: '700' },
+  miniLbl: { color: '#61615A', fontSize: 9, marginTop: 4, letterSpacing: 0.5 },
+  sectionHeader: { color: '#61615A', fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 12, marginTop: 10 },
+  barContainer: { marginBottom: 12 },
+  barLabelRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  barLabel: { color: '#ffffff', fontSize: 11, fontWeight: '500' },
+  barValue: { color: '#00E5FF', fontSize: 11, fontWeight: '600' },
+  barTrack: { height: 6, backgroundColor: '#161925', borderRadius: 3, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: '#00FF87', borderRadius: 3 },
+  cardHeader: { color: '#ffffff', fontSize: 14, fontWeight: '700', marginBottom: 15 },
+  sliderLabel: { color: '#ffffff', fontSize: 13, marginBottom: 8 },
+  neonText: { color: '#00FF87', fontWeight: '700' },
+  cyanText: { color: '#00E5FF', fontWeight: '700' },
+  mockSliderRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  stepBtn: { backgroundColor: '#161925', paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
+  btnText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
+  toggleGroup: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  chip: { backgroundColor: '#161925', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  activeChip: { backgroundColor: 'rgba(0, 255, 135, 0.15)', borderWidth: 1, borderColor: '#00FF87' },
+  chipText: { color: '#61615A', fontSize: 12 },
+  activeChipText: { color: '#00FF87', fontWeight: '600' },
+  chatBox: { height: 150, backgroundColor: '#090A0F', borderRadius: 10, padding: 12, marginBottom: 12 },
+  chatMessage: { color: '#ffffff', fontSize: 13, lineHeigh: 18 },
+  inputRow: { flexDirection: 'row', gap: 8 },
+  chatInput: { flex: 1, backgroundColor: '#090A0F', borderRadius: 10, paddingLeft: 12, color: '#ffffff', fontSize: 13 },
+  sendBtn: { backgroundColor: '#00FF87', paddingHorizontal: 16, borderRadius: 10, justifyContent: 'center' },
+  sendBtnText: { color: '#090A0F', fontWeight: '700', fontSize: 12 },
+  questRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  questTitle: { color: '#ffffff', fontSize: 14, fontWeight: '600' },
+  questDesc: { color: '#61615A', fontSize: 11, marginTop: 6 },
+  profileMeta: { color: '#ffffff', fontSize: 13, marginBottom: 8 },
+  resetBtn: { backgroundColor: 'rgba(211, 47, 47, 0.1)', borderWidth: 1, borderColor: '#d32f2f', padding: 12, borderRadius: 10, marginTop: 15, alignItems: 'center' },
+  resetBtnText: { color: '#d32f2f', fontSize: 12, fontWeight: '700' },
+  tabBar: { 
+    flexDirection: 'row', 
+    backgroundColor: '#090A0F', 
+    position: 'absolute', 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    height: 65, 
+    borderTopWidth: 1, 
+    borderColor: '#161925',
+    alignItems: 'center'
+  },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  tabText: { color: '#61615A', fontSize: 11, fontWeight: '500' },
+  activeTabText: { color: '#00FF87', fontWeight: '700' }
+});
