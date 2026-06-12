@@ -38,11 +38,18 @@ EcoTrace is built to be lightweight, incredibly fast, and secure. **Zero build t
 
 ---
 
-## 🚀 Getting Started
+📊 Data Sources & Benchmarks
+To ensure the carbon calculations and global comparisons are grounded in reality, the baseline formulas and benchmark comparisons are inspired by public data from:
 
-Because EcoTrace is a pure vanilla web application, deployment and local testing are instantaneous.
+IPCC (Intergovernmental Panel on Climate Change)
 
-### Local Development
-1. Clone the repository:
-   ```bash
-   git clone [https://github.com/yourusername/ecotrace.git](https://github.com/yourusername/ecotrace.git)
+IEA (International Energy Agency)
+
+Our World in Data
+
+(Note: The exact algorithms in this app are simplified for educational awareness and gamification purposes).
+
+🏆 Credits
+Author: Built by Anuja Nikam 
+
+Event: Designed and engineered for the Hack2skill PromptWars Challenge 3.
